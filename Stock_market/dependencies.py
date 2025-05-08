@@ -1,18 +1,14 @@
 from database import get_db
 from sqlalchemy.orm import Session
 from crud import get_user_by_api_key
-from fastapi.security import APIKeyHeader
-from fastapi import Depends, HTTPException, status
-
-
-api_key_scheme = APIKeyHeader(name="Authorization")
+from fastapi import Depends, HTTPException, status, Header
 
 
 def get_current_user(
-        authorization: str = Depends(api_key_scheme),
-        db: Session = Depends(get_db)
+    authorization: str = Header(default=None, alias="Authorization"),
+    db: Session = Depends(get_db)
 ):
-    if not authorization.startswith("TOKEN "):
+    if not authorization or not authorization.startswith("TOKEN "):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid authentication scheme"
@@ -26,6 +22,7 @@ def get_current_user(
             detail="Invalid API key"
         )
     return user
+
 
 def get_admin_user(user=Depends(get_current_user)):
     if user.role != "ADMIN":

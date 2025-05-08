@@ -1,6 +1,16 @@
-from fastapi import FastAPI
-from routers import public, orders, balance, admin, ws
+from pydoc import describe
 
+from fastapi import FastAPI
+from routers import public, order, balance, admin, ws
+
+tags_metadata = [
+    {"name": "root",    "description": "Root" },
+    {"name": "public",  "description": "Публичные маршруты"},
+    {"name": "balance", "description": "Работа с балансами"},
+    {"name": "order",   "description": "Работа с ордерами"},
+    {"name": "admin",   "description": "Админ-панель"},
+    {"name": "user",    "description": "Управление пользователями"},
+]
 
 app = FastAPI(
     title="Toy Exchange API",
@@ -13,6 +23,7 @@ app = FastAPI(
     license_info={
         "name": "MIT",
     },
+    openapi_tags=tags_metadata
 )
 
 # Root endpoint
@@ -25,11 +36,11 @@ async def root():
     }
 
 # Include routers
-app.include_router(public.router, prefix="/api/v1/public", tags=["public"])
-app.include_router(orders.router, prefix="/api/v1", tags=["orders"])
-app.include_router(balance.router, prefix="/api/v1", tags=["balance"])
-app.include_router(admin.router, prefix="/api/v1/admin", tags=["admin"])
-app.include_router(ws.router, prefix="/ws", tags=["websocket"])
+app.include_router(public.router,  prefix="/api/v1/public", tags=["public"])
+app.include_router(order.router,  prefix="/api/v1",         tags=["order"])
+app.include_router(balance.router, prefix="/api/v1",        tags=["balance"])
+app.include_router(admin.router,   prefix="/api/v1",        tags=["admin"])
+app.include_router(ws.router,      prefix="/ws",            tags=["websocket"])
 
 @app.on_event("startup")
 async def startup_event():

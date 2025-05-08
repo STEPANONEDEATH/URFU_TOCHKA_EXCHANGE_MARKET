@@ -9,11 +9,6 @@ from crud import create_user, get_instruments, get_orderbook, get_transactions
 router = APIRouter(tags=["public"])
 
 
-@router.get("/health")
-async def health_check():
-    return {"status": "ok"}
-
-
 @router.post("/register", response_model=User)
 def register(new_user: NewUser, db: Session = Depends(get_db)):
     return create_user(db, new_user)
