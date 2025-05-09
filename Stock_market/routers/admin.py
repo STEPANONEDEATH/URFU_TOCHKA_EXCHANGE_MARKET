@@ -1,0 +1,93 @@
+from models import Instrument, Ok, DepositRequest, WithdrawRequest, User
+from fastapi import APIRouter, Depends, HTTPException, status
+from dependencies import get_admin_user
+from sqlalchemy.orm import Session
+from typing import Annotated
+from database import get_db
+from uuid import UUID
+from crud import (
+    create_instrument, delete_instrument,
+    update_balance, get_user, delete_user
+)
+
+
+router = APIRouter(prefix="/admin", tags=["admin"])
+
+DbSession = Annotated[Session, Depends(get_db)]
+AdminUser = Annotated[User, Depends(get_admin_user)]
+
+
+@router.delete("/user/{user_id}", response_model=User, tags=["user"])
+def remove_user(
+        user_id: UUID,
+        admin: AdminUser,
+        db: DbSession
+):
+    """Удаление пользователя по ID"""
+    user = get_user(db, user_id)
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User not found"
+        )
+
+    delete_user(db, user_id)
+    return user
+
+
+@router.post("/instrument", response_model=Ok, status_code=status.HTTP_201_CREATED)
+def add_instrument(
+        instrument: Instrument,
+        admin: AdminUser,
+        db: DbSession
+):
+    """Добавление нового инструмента (Монет / Мем-коинов / Криптовалюты)"""
+    create_instrument(db, instrument)
+    return Ok()
+
+
+@router.delete("/instrument/{ticker}", response_model=Ok)
+def remove_instrument(
+        ticker: str,
+        admin: AdminUser,
+        db: DbSession
+):
+    """Удаление финансового инструмента по тикеру"""
+
+    # Логирование запроса на удаление
+    print(f"Trying to delete instrument with ticker: {ticker}")
+
+    # Пытаемся удалить инструмент
+    if not delete_instrument(db, ticker):
+        print(f"Instrument with ticker {ticker} not found")  # Логирование, если инструмент не найден
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Instrument not found"
+        )
+
+    # Логирование успешного удаления
+    print(f"Instrument with ticker {ticker} deleted successfully")
+
+    # Возвращаем успешный ответ с объектом Ok
+    return Ok()  # Возвращаем объект Ok, что эквивалентно {'success': True}
+
+@router.post("/balance/deposit", response_model=Ok, tags=["admin", "balance"])
+def deposit_funds(
+        request: DepositRequest,
+        admin: AdminUser,
+        db: DbSession
+):
+    """Пополнение баланса"""
+    update_balance(db, request.user_id, request.ticker, request.amount)
+    return Ok()
+
+
+@router.post("/balance/withdraw", response_model=Ok, tags=["admin", "balance"])
+def withdraw_funds(
+        request: WithdrawRequest,
+        admin: AdminUser,
+        db: DbSession
+):
+    """Вывод средств (по сути просто списание с баланса)"""
+    update_balance(db, request.user_id, request.ticker, -request.amount)
+    return Ok()
