@@ -17,13 +17,21 @@ DbSession = Annotated[Session, Depends(get_db)]
 AdminUser = Annotated[User, Depends(get_admin_user)]
 
 
-@router.delete("/user/{user_id}", response_model=User, tags=["user"])
+@router.delete("/user/{user_id}",
+               response_model=User,
+               tags=["user"],
+               summary="Delete User",
+               description = """Удаление пользователя по ID.
+    
+                                Этот метод позволяет администратору удалить пользователя из платформы по уникальному ID. 
+                                Если пользователь не найден, возвращается ошибка 404."""
+              )
 def remove_user(
         user_id: UUID,
         admin: AdminUser,
         db: DbSession
 ):
-    """Удаление пользователя по ID"""
+
     user = get_user(db, user_id)
     if not user:
         raise HTTPException(
@@ -35,24 +43,37 @@ def remove_user(
     return user
 
 
-@router.post("/instrument", response_model=Ok, status_code=status.HTTP_201_CREATED)
+@router.post("/instrument",
+             response_model=Ok,
+             status_code=status.HTTP_201_CREATED,
+             summary="Add Instrument",
+             description = """Добавление нового инструмента (Монет / Мем-коинов / Криптовалюты).
+    
+                              Этот метод позволяет администратору добавить новый финансовый инструмент на платформу, например, криптовалюту или токен."""
+            )
 def add_instrument(
         instrument: Instrument,
         admin: AdminUser,
         db: DbSession
 ):
-    """Добавление нового инструмента (Монет / Мем-коинов / Криптовалюты)"""
+
     create_instrument(db, instrument)
     return Ok()
 
 
-@router.delete("/instrument/{ticker}", response_model=Ok)
+@router.delete("/instrument/{ticker}",
+               response_model=Ok,
+               summary="Delete Instrument",
+               description = """Удаление финансового инструмента по тикеру.
+    
+                                Этот метод позволяет администратору удалить финансовый инструмент (например, криптовалюту или токен) по тикеру. 
+                                В случае если инструмент не найден, возвращается ошибка 404"""
+              )
 def remove_instrument(
         ticker: str,
         admin: AdminUser,
         db: DbSession
 ):
-    """Удаление финансового инструмента по тикеру"""
 
     # Логирование запроса на удаление
     print(f"Trying to delete instrument with ticker: {ticker}")
@@ -68,26 +89,39 @@ def remove_instrument(
     # Логирование успешного удаления
     print(f"Instrument with ticker {ticker} deleted successfully")
 
-    # Возвращаем успешный ответ с объектом Ok
-    return Ok()  # Возвращаем объект Ok, что эквивалентно {'success': True}
+    return Ok()
 
-@router.post("/balance/deposit", response_model=Ok, tags=["admin", "balance"])
+@router.post("/balance/deposit",
+             response_model=Ok,
+             tags=["admin", "balance"],
+             summary="Deposit",
+             description = """Пополнение баланса пользователя.
+             
+                              Этот метод позволяет администратору пополнить баланс пользователя в определённой валюте."""
+            )
 def deposit_funds(
         request: DepositRequest,
         admin: AdminUser,
         db: DbSession
 ):
-    """Пополнение баланса"""
+
     update_balance(db, request.user_id, request.ticker, request.amount)
     return Ok()
 
 
-@router.post("/balance/withdraw", response_model=Ok, tags=["admin", "balance"])
+@router.post("/balance/withdraw",
+             response_model=Ok,
+             tags=["admin", "balance"],
+             summary="Withdraw",
+             description = """Вывод средств (списание с баланса)
+             
+                              Этот метод позволяет администратору списать средства с баланса пользователя в указанной валюте."""
+            )
 def withdraw_funds(
         request: WithdrawRequest,
         admin: AdminUser,
         db: DbSession
 ):
-    """Вывод средств (по сути просто списание с баланса)"""
+
     update_balance(db, request.user_id, request.ticker, -request.amount)
     return Ok()

@@ -12,7 +12,10 @@ from models import LimitOrderBody, MarketOrderBody, CreateOrderResponse, LimitOr
 router = APIRouter(tags=["order"])
 
 
-@router.post("/order", response_model=CreateOrderResponse)
+@router.post("/order",
+             response_model=CreateOrderResponse,
+             summary="Create Order",
+            )
 async def create_order_endpoint(
         order: Union[LimitOrderBody, MarketOrderBody],
         user=Depends(get_current_user),
@@ -26,7 +29,10 @@ async def create_order_endpoint(
     return CreateOrderResponse(order_id=db_order.id)
 
 
-@router.get("/order", response_model=List[Union[LimitOrder, MarketOrder]])
+@router.get("/order",
+            response_model=List[Union[LimitOrder, MarketOrder]],
+            summary="List Orders",
+           )
 def list_orders(
         user=Depends(get_current_user),
         db: Session = Depends(get_db)
@@ -59,7 +65,10 @@ def list_orders(
     ]
 
 
-@router.get("/order/{order_id}", response_model=Union[LimitOrder, MarketOrder])
+@router.get("/order/{order_id}",
+            response_model=Union[LimitOrder, MarketOrder],
+            summary="Get Order"
+           )
 def get_order_endpoint(
         order_id: UUID,
         user=Depends(get_current_user),
@@ -97,7 +106,10 @@ def get_order_endpoint(
         )
 
 
-@router.delete("/order/{order_id}", response_model=dict)
+@router.delete("/order/{order_id}",
+               response_model=dict,
+               summary="Cancel Order"
+              )
 async def cancel_order_endpoint(
         order_id: UUID,
         user=Depends(get_current_user),

@@ -1,5 +1,3 @@
-from pydoc import describe
-
 from fastapi import FastAPI
 from routers import public, order, balance, admin, ws
 
