@@ -1,4 +1,5 @@
 from models import Level
+from fastapi import Query
 from database import get_db
 from sqlalchemy.orm import Session
 from fastapi import APIRouter, Depends, HTTPException
@@ -38,7 +39,7 @@ def list_instruments(db: Session = Depends(get_db)):
            )
 def get_orderbook_endpoint(
         ticker: str,
-        limit: int = 10,
+        limit: int = Query(10, le=25),
         db: Session = Depends(get_db)
 ):
     if limit > 25:
@@ -59,7 +60,7 @@ def get_orderbook_endpoint(
            )
 def get_transaction_history(
         ticker: str,
-        limit: int = 10,
+        limit: int = Query(10, le=100),
         db: Session = Depends(get_db)
 ):
     if limit > 100:
