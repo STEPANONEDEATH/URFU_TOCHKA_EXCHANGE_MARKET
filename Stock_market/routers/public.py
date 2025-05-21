@@ -1,6 +1,7 @@
 from models import Level
 from fastapi import Query
 from database import get_db
+from crud import get_instrument
 from sqlalchemy.orm import Session
 from fastapi import APIRouter, Depends, HTTPException
 from models import NewUser, User, Instrument, L2OrderBook, Transaction
@@ -45,11 +46,16 @@ def get_orderbook_endpoint(
     if limit > 25:
         raise HTTPException(status_code=400, detail="Limit cannot exceed 25")
 
+    # Проверка: существует ли инструмент
+    instrument = get_instrument(db, ticker)
+    if not instrument:
+        raise HTTPException(status_code=404, detail=f"Instrument '{ticker}' not found.")
+
     bids, asks = get_orderbook(db, ticker, limit)
 
     return L2OrderBook(
         bid_levels=[Level(price=o.price, qty=o.quantity - o.filled) for o in bids],
-        ask_levels=[Level(price=o.price, qty=o.quantity - o.filled) for o in asks]
+        ask_levels=[Level(price=o.price, qty=o.quantity - o.filled) for o in asks if o.price is not None]
     )
 
 

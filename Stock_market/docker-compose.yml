@@ -3,7 +3,7 @@ version: '3.8'
 services:
   zookeeper:
     image: bitnami/zookeeper:latest
-    platform: linux/arm64
+    platform: linux/amd64
     environment:
       ZOOKEEPER_CLIENT_PORT: 2181
       ZOOKEEPER_TICK_TIME: 2000
@@ -17,7 +17,7 @@ services:
 
   kafka:
     image: bitnami/kafka:3.6.2
-    platform: linux/arm64
+    platform: linux/amd64
     depends_on:
       zookeeper:
         condition: service_healthy
@@ -31,8 +31,9 @@ services:
       KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: "1"
       KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: "1"
       KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+      KAFKA_LOG4J_ROOT_LOGLEVEL: WARN
     healthcheck:
-      test: ["CMD", "kafka-topics.sh", "--list", "--bootstrap-server", "kafka:9092"]
+      test: ["CMD", "kafka-topics.sh", "--list", "--bootstrap-server", "localhost:9092"]
       interval: 10s
       timeout: 5s
       retries: 6
@@ -53,7 +54,7 @@ services:
 
   app:
     build: .
-    platform: linux/arm64
+    platform: linux/amd64
     env_file:
       - .env
     depends_on:

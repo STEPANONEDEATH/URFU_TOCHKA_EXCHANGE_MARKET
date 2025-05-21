@@ -7,7 +7,8 @@ from database import get_db
 from uuid import UUID
 from crud import (
     create_instrument, delete_instrument,
-    update_balance, get_user, delete_user
+    update_balance, get_user, delete_user,
+    get_balance
 )
 
 
@@ -26,17 +27,25 @@ AdminUser = Annotated[User, Depends(get_admin_user)]
                                 Этот метод позволяет администратору удалить пользователя из платформы по уникальному ID. 
                                 Если пользователь не найден, возвращается ошибка 404."""
               )
-def remove_user(
-        user_id: UUID,
-        admin: AdminUser,
-        db: DbSession
-):
-
+def remove_user(user_id: UUID, admin: AdminUser, db: DbSession):
+    if user_id == admin.id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Admins cannot delete themselves."
+        )
+        
     user = get_user(db, user_id)
     if not user:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="User not found"
+        )
+
+    # Нельзя удалять других админов
+    if user.role.upper() == "ADMIN":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Admins cannot delete other admins."
         )
 
     delete_user(db, user_id)
@@ -113,15 +122,27 @@ def deposit_funds(
              response_model=Ok,
              tags=["admin", "balance"],
              summary="Withdraw",
-             description = """Вывод средств (списание с баланса)
-             
+             description="""Вывод средств (списание с баланса)
+
                               Этот метод позволяет администратору списать средства с баланса пользователя в указанной валюте."""
-            )
+             )
 def withdraw_funds(
         request: WithdrawRequest,
         admin: AdminUser,
         db: DbSession
 ):
+    if request.amount <= 0:
+        raise HTTPException(status_code=400, detail="Amount must be positive")
+
+    if request.amount != int(request.amount):
+        raise HTTPException(status_code=400, detail="Only whole numbers are allowed")
+
+    balance = get_balance(db, request.user_id, request.ticker)
+    if balance is None:
+        raise HTTPException(status_code=404, detail="User has no such currency on balance")
+
+    if request.amount > balance.amount:
+        raise HTTPException(status_code=400, detail="Insufficient funds")
 
     update_balance(db, request.user_id, request.ticker, -request.amount)
     return Ok()
