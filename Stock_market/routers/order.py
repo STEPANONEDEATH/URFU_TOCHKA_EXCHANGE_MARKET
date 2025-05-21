@@ -135,22 +135,35 @@ def get_order_endpoint(
 
 @router.delete("/order/{order_id}",
                response_model=dict,
-               summary="Cancel Order"
-              )
+               summary="Cancel Order")
 async def cancel_order_endpoint(
         order_id: UUID,
         user=Depends(get_current_user),
         db: Session = Depends(get_db)
 ):
     db_order = get_order(db, order_id)
+    
+    # Проверка существования ордера и прав доступа
     if not db_order or db_order.user_id != user.id:
         raise HTTPException(status_code=404, detail="Order not found")
+    
+    # Проверка, не удален ли ордер уже
+    if db_order.status == "CANCELLED":
+        raise HTTPException(status_code=422, detail="Order already cancelled")
 
-    success = cancel_order(db, order_id)
-    if success:
-        # refresh, чтобы объект был привязан к сессии
+    try:
+        success = cancel_order(db, order_id)
+        if not success:
+            raise HTTPException(status_code=400, detail="Order cannot be cancelled in its current state")
+            
+        # Обновляем объект и отправляем событие
         db.refresh(db_order)
         await produce_order_event(db_order, "CANCELLED")
         return {"success": True}
-    else:
-        raise HTTPException(status_code=400, detail="Order cannot be cancelled")
+        
+    except Exception as e:
+        logger.error(f"Error cancelling order {order_id}: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail="Internal server error while processing order cancellation"
+        )

@@ -35,7 +35,7 @@ async def root():
 
 # Include routers
 app.include_router(public.router,  prefix="/api/v1/public", tags=["public"])
-app.include_router(order.router,  prefix="/api/v1",         tags=["order"])
+app.include_router(order.router,   prefix="/api/v1",        tags=["order"])
 app.include_router(balance.router, prefix="/api/v1",        tags=["balance"])
 app.include_router(admin.router,   prefix="/api/v1",        tags=["admin"])
 app.include_router(ws.router,      prefix="/ws",            tags=["websocket"])

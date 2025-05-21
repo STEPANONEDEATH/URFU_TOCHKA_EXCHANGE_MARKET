@@ -15,8 +15,8 @@ logging.getLogger("sqlalchemy.engine").setLevel(logging.WARNING)
 engine = create_engine(
     settings.DATABASE_URL,
     poolclass=QueuePool,
-    pool_size=20,
-    max_overflow=0,
+    pool_size=50,
+    max_overflow=10,
     pool_pre_ping=True,  # Проверка соединения
     connect_args={"connect_timeout": 5}  # Таймаут подключения
 )

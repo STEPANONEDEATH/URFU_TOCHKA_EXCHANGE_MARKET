@@ -46,7 +46,7 @@ class Order(Base):
     instrument_ticker = Column(String, ForeignKey("instruments.ticker", ondelete="CASCADE"))
     direction = Column(Enum("BUY", "SELL", name="order_direction"))
     type = Column(Enum("MARKET", "LIMIT", name="order_type"))
-    price = Column(Integer, nullable=True)  # Null for market orders
+    price = Column(Integer, nullable=True)
     quantity = Column(Integer, nullable=False)
     filled = Column(Integer, default=0)
     status = Column(Enum("NEW", "EXECUTED", "PARTIALLY_EXECUTED", "CANCELLED", name="order_status"), default="NEW")
