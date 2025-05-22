@@ -3,8 +3,6 @@ import models
 import schemas
 import logging
 
-
-from uuid import UUID
 from typing import Union
 from datetime import datetime
 from schemas import User, Balance
@@ -145,26 +143,39 @@ def create_order(db: Session, order: Union[models.LimitOrderBody, models.MarketO
         status="NEW"
     )
     db.add(db_order)
+    db.flush()
+
+    match_order(db, db_order)
+
     db.commit()
     db.refresh(db_order)
-    match_order(db, db_order)
     return db_order
 
-def cancel_order(db: Session, order_id: UUID):
-    order = db.query(schemas.Order).filter(schemas.Order.id == order_id).first()
+def cancel_order(db: Session, order_id: UUID) -> bool:
+    order = db.query(schemas.Order).filter(
+        schemas.Order.id == order_id,
+        schemas.Order.status.in_(["NEW", "PARTIALLY_EXECUTED"])
+    ).first()
 
-    # Проверки
     if not order:
-        raise ValueError("Order not found")
-    if order.type == "MARKET":
-        raise ValueError("Cannot cancel market order")
-    if order.status not in ["NEW", "PARTIALLY_EXECUTED"]:
-        raise ValueError("Cannot cancel order with current status")
+        return False
 
-    order.status = "CANCELLED"
-    db.commit()
-    logger.info(f"Order {order_id} cancelled")
-    return True
+    # Проверяем тип ордера
+    if order.type == "MARKET":
+        # Для market-ордеров проверяем, не был ли он уже исполнен
+        if order.filled > 0:
+            raise ValueError("Cannot cancel partially executed market order")
+        # Разрешаем отмену неисполненных market-ордеров
+        order.status = "CANCELLED"
+        db.add(order)
+        db.commit()
+        return True
+    else:
+        # Лимитные ордера можно отменять в любом случае
+        order.status = "CANCELLED"
+        db.add(order)
+        db.commit()
+        return True
 
 def get_balance(db: Session, user_id: UUID, ticker: str):
     return db.query(schemas.Balance).filter(
@@ -216,105 +227,147 @@ def delete_user(db: Session, user_id: UUID):
     return False
 
 def match_order(db: Session, new_order: schemas.Order):
-    logger.info(f"Matching new order: {new_order}")
-    opposite_side = "SELL" if new_order.direction == "BUY" else "BUY"
-
+    logger.info(f"Starting order matching for: {new_order}")
+    
+    opposite_side = "BUY" if new_order.direction == "SELL" else "SELL"
+    
     try:
-        # Блокируем ордера для конкурентного доступа
-        matched_orders = (
-            db.query(schemas.Order)
-            .filter(
+        with db.begin_nested():
+            # Базовый запрос для поиска встречных ордеров
+            base_query = db.query(schemas.Order).filter(
                 schemas.Order.instrument_ticker == new_order.instrument_ticker,
                 schemas.Order.direction == opposite_side,
                 schemas.Order.status.in_(["NEW", "PARTIALLY_EXECUTED"]),
-                schemas.Order.price != None
+                schemas.Order.price.isnot(None)
             )
-            .filter(
-                schemas.Order.price <= new_order.price
-                if new_order.direction == "BUY"
-                else schemas.Order.price >= new_order.price
-            )
-            .order_by(
-                schemas.Order.price.asc() if new_order.direction == "BUY" 
+
+            # Условия по цене
+            if new_order.price is not None:
+                if new_order.direction == "SELL":
+                    base_query = base_query.filter(schemas.Order.price <= new_order.price)
+                else:
+                    base_query = base_query.filter(schemas.Order.price >= new_order.price)
+
+            matching_orders = base_query.order_by(
+                schemas.Order.price.asc() if new_order.direction == "SELL" 
                 else schemas.Order.price.desc(),
                 schemas.Order.created_at.asc()
-            )
-            .with_for_update()  # Блокировка строк
-            .all()
-        )
+            ).with_for_update().all()
 
-        qty_to_fill = new_order.quantity - new_order.filled
-        executed_trades = []
+            qty_to_fill = new_order.quantity - new_order.filled
+            trades = []
 
-        for counter_order in matched_orders:
-            if qty_to_fill == 0:
-                break
+            for counter_order in matching_orders:
+                if qty_to_fill <= 0:
+                    break
 
-            available_qty = counter_order.quantity - counter_order.filled
-            trade_qty = min(qty_to_fill, available_qty)
+                available_qty = counter_order.quantity - counter_order.filled
+                trade_qty = min(qty_to_fill, available_qty)
 
-            if trade_qty <= 0:
-                continue
+                if trade_qty <= 0:
+                    continue
 
-            trade_price = counter_order.price or 0
+                # Проверка балансов
+                if new_order.direction == "BUY":
+                    # Для BUY-ордера проверяем:
+                    # 1. Хватает ли RUB у покупателя
+                    # 2. Хватает ли акций у продавца
+                    buyer_rub_balance = get_balance(db, new_order.user_id, "RUB")
+                    seller_ticker_balance = get_balance(db, counter_order.user_id, new_order.instrument_ticker)
+                    
+                    required_rub = trade_qty * counter_order.price
+                    
+                    if not buyer_rub_balance or buyer_rub_balance.amount < required_rub:
+                        logger.warning(f"Insufficient RUB for user {new_order.user_id}")
+                        continue
+                        
+                    if not seller_ticker_balance or seller_ticker_balance.amount < trade_qty:
+                        logger.warning(f"Insufficient {new_order.instrument_ticker} for user {counter_order.user_id}")
+                        continue
+                else:
+                    # Для SELL-ордера проверяем:
+                    # 1. Хватает ли акций у продавца
+                    # 2. Хватает ли RUB у покупателя
+                    seller_ticker_balance = get_balance(db, new_order.user_id, new_order.instrument_ticker)
+                    buyer_rub_balance = get_balance(db, counter_order.user_id, "RUB")
+                    
+                    required_rub = trade_qty * counter_order.price
+                    
+                    if not seller_ticker_balance or seller_ticker_balance.amount < trade_qty:
+                        logger.warning(f"Insufficient {new_order.instrument_ticker} for user {new_order.user_id}")
+                        continue
+                        
+                    if not buyer_rub_balance or buyer_rub_balance.amount < required_rub:
+                        logger.warning(f"Insufficient RUB for user {counter_order.user_id}")
+                        continue
 
-            # Обновляем балансы
-            if new_order.direction == "BUY":
-                update_balance(db, new_order.user_id, new_order.instrument_ticker, trade_qty)
-                update_balance(db, new_order.user_id, "RUB", -trade_qty * trade_price)
-                update_balance(db, counter_order.user_id, "RUB", trade_qty * trade_price)
-                update_balance(db, counter_order.user_id, new_order.instrument_ticker, -trade_qty)
-            else:
-                update_balance(db, new_order.user_id, "RUB", trade_qty * trade_price)
-                update_balance(db, new_order.user_id, new_order.instrument_ticker, -trade_qty)
-                update_balance(db, counter_order.user_id, new_order.instrument_ticker, trade_qty)
-                update_balance(db, counter_order.user_id, "RUB", -trade_qty * trade_price)
+                # Создаем транзакцию
+                trade = schemas.Transaction(
+                    instrument_ticker=new_order.instrument_ticker,
+                    price=counter_order.price,
+                    quantity=trade_qty,
+                    buyer_id=new_order.user_id if new_order.direction == "BUY" else counter_order.user_id,
+                    seller_id=counter_order.user_id if new_order.direction == "BUY" else new_order.user_id
+                )
+                db.add(trade)
+                trades.append(trade)
 
-            # Создаем транзакцию
-            transaction = schemas.Transaction(
-                instrument_ticker=new_order.instrument_ticker,
-                price=trade_price,
-                quantity=trade_qty,
-                buyer_id=new_order.user_id if new_order.direction == "BUY" else counter_order.user_id,
-                seller_id=counter_order.user_id if new_order.direction == "BUY" else new_order.user_id
-            )
-            db.add(transaction)
-            executed_trades.append(transaction)
+                # Обновляем ордера
+                new_order.filled += trade_qty
+                counter_order.filled += trade_qty
 
-            # Обновляем ордера
-            new_order.filled += trade_qty
-            counter_order.filled += trade_qty
+                new_order.status = (
+                    "EXECUTED" if new_order.filled == new_order.quantity
+                    else "PARTIALLY_EXECUTED" if new_order.filled > 0
+                    else "NEW"
+                )
+                counter_order.status = (
+                    "EXECUTED" if counter_order.filled == counter_order.quantity
+                    else "PARTIALLY_EXECUTED"
+                )
 
-            new_order.status = (
-                "EXECUTED" if new_order.filled == new_order.quantity
-                else "PARTIALLY_EXECUTED"
-            )
-            counter_order.status = (
-                "EXECUTED" if counter_order.filled == counter_order.quantity
-                else "PARTIALLY_EXECUTED"
-            )
+                db.add(new_order)
+                db.add(counter_order)
+                
+                qty_to_fill -= trade_qty
 
-            # Явно помечаем ордера как измененные
-            db.add(new_order)
-            db.add(counter_order)
-            db.flush()
+                logger.info(f"Matched {trade_qty} {new_order.instrument_ticker} at {counter_order.price}")
 
-            logger.info(
-                f"Matched trade: {trade_qty} {new_order.instrument_ticker} at {trade_price} "
-                f"between {new_order.user_id} and {counter_order.user_id}. "
-                f"New order status: {new_order.status}, Counter order status: {counter_order.status}"
-            )
+            db.commit()
 
-            qty_to_fill -= trade_qty
+        # Обновляем балансы после успешного исполнения
+        for trade in trades:
+            try:
+                if new_order.direction == "BUY":
+                    # Для BUY-ордера:
+                    # 1. Покупатель получает акции
+                    update_balance(db, new_order.user_id, new_order.instrument_ticker, trade.quantity)
+                    # 2. Покупатель теряет RUB
+                    update_balance(db, new_order.user_id, "RUB", -trade.quantity * trade.price)
+                    # 3. Продавец получает RUB
+                    update_balance(db, trade.seller_id, "RUB", trade.quantity * trade.price)
+                    # 4. Продавец теряет акции
+                    update_balance(db, trade.seller_id, new_order.instrument_ticker, -trade.quantity)
+                else:
+                    # Для SELL-ордера:
+                    # 1. Продавец получает RUB
+                    update_balance(db, new_order.user_id, "RUB", trade.quantity * trade.price)
+                    # 2. Продавец теряет акции
+                    update_balance(db, new_order.user_id, new_order.instrument_ticker, -trade.quantity)
+                    # 3. Покупатель получает акции
+                    update_balance(db, trade.buyer_id, new_order.instrument_ticker, trade.quantity)
+                    # 4. Покупатель теряет RUB
+                    update_balance(db, trade.buyer_id, "RUB", -trade.quantity * trade.price)
+            except ValueError as e:
+                logger.error(f"Balance update failed: {str(e)}")
+                db.rollback()
+                raise
 
         db.commit()
-        logger.info(f"Successfully committed {len(executed_trades)} trades")
-        
-        # Обновляем состояние ордера после коммита
         db.refresh(new_order)
         return new_order
 
     except Exception as e:
         db.rollback()
-        logger.error(f"Failed to match orders: {str(e)}", exc_info=True)
+        logger.error(f"Order matching failed: {str(e)}", exc_info=True)
         raise
