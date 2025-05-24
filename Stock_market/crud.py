@@ -3,237 +3,296 @@ import models
 import schemas
 import logging
 
+from uuid import UUID
 from typing import Union
 from datetime import datetime
 from schemas import User, Balance
 from sqlalchemy.orm import Session
+from fastapi import HTTPException, status
 from sqlalchemy.exc import IntegrityError
 from schemas import Instrument as ORMInstrument
 
 logger = logging.getLogger(__name__)
 
 def get_user(db: Session, user_id: UUID):
-    return db.query(schemas.User).filter(schemas.User.id == user_id).first()
+    try:
+        return db.query(schemas.User).filter(schemas.User.id == user_id).first()
+    except Exception as e:
+        logger.error(f"Error getting user {user_id}: {str(e)}", exc_info=True)
+        raise
 
 def get_user_by_api_key(db: Session, api_key: str):
-    return db.query(schemas.User).filter(schemas.User.api_key == api_key).first()
+    try:
+        return db.query(schemas.User).filter(schemas.User.api_key == api_key).first()
+    except Exception as e:
+        logger.error(f"Error getting user by API key: {str(e)}", exc_info=True)
+        raise
 
 def create_user(db: Session, user: models.NewUser):
-    db_user = schemas.User(
-        name=user.name,
-        api_key=str(uuid.uuid4())
-    )
-    db.add(db_user)
-    db.commit()
-    db.refresh(db_user)
-    logger.info(f"[REGISTERED] New user: {db_user.name} with API key: {db_user.api_key}")
-    return db_user
+    try:
+        db_user = schemas.User(
+            name=user.name,
+            api_key=str(uuid.uuid4())
+        )
+        db.add(db_user)
+        db.commit()
+        db.refresh(db_user)
+        logger.info(f"New user created: {db_user.name}")
+        return db_user
+    except IntegrityError as e:
+        logger.error(f"User creation failed (duplicate name?): {str(e)}")
+        raise
+    except Exception as e:
+        logger.error(f"Error creating user: {str(e)}", exc_info=True)
+        raise
 
 def get_instruments(db: Session, skip: int = 0, limit: int = 100):
-    return db.query(schemas.Instrument).filter(schemas.Instrument.is_active == True).offset(skip).limit(limit).all()
+    try:
+        return db.query(schemas.Instrument).filter(schemas.Instrument.is_active == True).offset(skip).limit(limit).all()
+    except Exception as e:
+        logger.error(f"Error getting instruments: {str(e)}", exc_info=True)
+        raise
 
 def get_instrument(db: Session, ticker: str):
-    return db.query(schemas.Instrument).filter(schemas.Instrument.ticker == ticker).first()
-
-from fastapi import HTTPException, status
+    try:
+        return db.query(schemas.Instrument).filter(schemas.Instrument.ticker == ticker).first()
+    except Exception as e:
+        logger.error(f"Error getting instrument {ticker}: {str(e)}", exc_info=True)
+        raise
 
 def create_instrument(db: Session, instrument: models.Instrument):
-    existing_instrument = db.query(schemas.Instrument).filter(
-        schemas.Instrument.ticker == instrument.ticker
-    ).first()
-    
-    if existing_instrument:
-        logger.warning(f"Instrument {instrument.ticker} already exists")
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail=f"Instrument with ticker {instrument.ticker} already exists"
+    try:
+        existing_instrument = db.query(schemas.Instrument).filter(
+            schemas.Instrument.ticker == instrument.ticker
+        ).first()
+        
+        if existing_instrument:
+            logger.error(f"Instrument already exists: {instrument.ticker}")
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=f"Instrument with ticker {instrument.ticker} already exists"
+            )
+        
+        db_instrument = schemas.Instrument(
+            ticker=instrument.ticker,
+            name=instrument.name
         )
-    
-    logger.info(f"Creating instrument: ticker={instrument.ticker}, name={instrument.name}")
-    db_instrument = schemas.Instrument(
-        ticker=instrument.ticker,
-        name=instrument.name
-    )
-    
-    db.add(db_instrument)
-    db.commit()
-    db.refresh(db_instrument)
-    return db_instrument
+        
+        db.add(db_instrument)
+        db.commit()
+        db.refresh(db_instrument)
+        return db_instrument
+    except Exception as e:
+        logger.error(f"Error creating instrument {instrument.ticker}: {str(e)}", exc_info=True)
+        raise
 
 def delete_instrument(db: Session, ticker: str) -> bool:
-    instrument = db.query(schemas.Instrument).filter(schemas.Instrument.ticker == ticker).first()
-    if not instrument:
-        return False
-    db.delete(instrument)
-    db.commit()
-    logger.info(f"Deleted instrument: {ticker}")
-    return True
+    try:
+        instrument = db.query(schemas.Instrument).filter(schemas.Instrument.ticker == ticker).first()
+        if not instrument:
+            logger.error(f"Instrument not found for deletion: {ticker}")
+            return False
+        db.delete(instrument)
+        db.commit()
+        return True
+    except Exception as e:
+        logger.error(f"Error deleting instrument {ticker}: {str(e)}", exc_info=True)
+        raise
 
 def get_orderbook(db: Session, ticker: str, limit: int = 10):
-    bids = db.query(schemas.Order).filter(
-        schemas.Order.instrument_ticker == ticker,
-        schemas.Order.direction == "BUY",
-        schemas.Order.status.in_(["NEW", "PARTIALLY_EXECUTED"]),
-        schemas.Order.type == "LIMIT",
-        schemas.Order.price != None
-    ).order_by(schemas.Order.price.desc()).limit(limit).all()
+    try:
+        bids = db.query(schemas.Order).filter(
+            schemas.Order.instrument_ticker == ticker,
+            schemas.Order.direction == "BUY",
+            schemas.Order.status.in_(["NEW", "PARTIALLY_EXECUTED"]),
+            schemas.Order.type == "LIMIT",
+            schemas.Order.price != None
+        ).order_by(schemas.Order.price.desc()).limit(limit).all()
 
-    asks = db.query(schemas.Order).filter(
-        schemas.Order.instrument_ticker == ticker,
-        schemas.Order.direction == "SELL",
-        schemas.Order.status.in_(["NEW", "PARTIALLY_EXECUTED"]),
-        schemas.Order.type == "LIMIT",
-        schemas.Order.price != None
-    ).order_by(schemas.Order.price.asc()).limit(limit).all()
+        asks = db.query(schemas.Order).filter(
+            schemas.Order.instrument_ticker == ticker,
+            schemas.Order.direction == "SELL",
+            schemas.Order.status.in_(["NEW", "PARTIALLY_EXECUTED"]),
+            schemas.Order.type == "LIMIT",
+            schemas.Order.price != None
+        ).order_by(schemas.Order.price.asc()).limit(limit).all()
 
-    return bids, asks
+        return bids, asks
+    except Exception as e:
+        logger.error(f"Error getting orderbook for {ticker}: {str(e)}", exc_info=True)
+        raise
 
 def get_transactions(db: Session, ticker: str, limit: int = 10):
-    return db.query(schemas.Transaction).filter(
-        schemas.Transaction.instrument_ticker == ticker
-    ).order_by(schemas.Transaction.created_at.desc()).limit(limit).all()
+    try:
+        return db.query(schemas.Transaction).filter(
+            schemas.Transaction.instrument_ticker == ticker
+        ).order_by(schemas.Transaction.created_at.desc()).limit(limit).all()
+    except Exception as e:
+        logger.error(f"Error getting transactions for {ticker}: {str(e)}", exc_info=True)
+        raise
 
 def get_orders(db: Session, user_id: UUID):
-    return db.query(schemas.Order).filter(schemas.Order.user_id == user_id).all()
+    try:
+        return db.query(schemas.Order).filter(schemas.Order.user_id == user_id).all()
+    except Exception as e:
+        logger.error(f"Error getting orders for user {user_id}: {str(e)}", exc_info=True)
+        raise
 
 def get_order(db: Session, order_id: UUID):
-    return db.query(schemas.Order).filter(schemas.Order.id == order_id).first()
+    try:
+        return db.query(schemas.Order).filter(schemas.Order.id == order_id).first()
+    except Exception as e:
+        logger.error(f"Error getting order {order_id}: {str(e)}", exc_info=True)
+        raise
 
 def create_order(db: Session, order: Union[models.LimitOrderBody, models.MarketOrderBody], user_id: UUID):
-    instrument = get_instrument(db, order.ticker)
+    try:
+        instrument = get_instrument(db, order.ticker)
 
-    if not instrument:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid ticker")
-    if order.qty <= 0:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Order quantity must be greater than zero")
-    if isinstance(order, models.LimitOrderBody) and order.price is None:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Limit order must include a price")
+        if not instrument:
+            logger.error(f"Invalid ticker for order: {order.ticker}")
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid ticker")
+        
+        if order.qty <= 0:
+            logger.error(f"Invalid order quantity: {order.qty}")
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Order quantity must be greater than zero")
+        
+        if isinstance(order, models.LimitOrderBody) and order.price is None:
+            logger.error("Limit order created without price")
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Limit order must include a price")
 
-    if order.direction == "SELL":
-        user_balance = get_balance(db, user_id, order.ticker)
-        required_amount = order.qty
-        if not user_balance or user_balance.amount < required_amount:
-            raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Insufficient balance")
-
-    else:  # BUY
-        if isinstance(order, models.LimitOrderBody):
-            required_amount = order.qty * order.price
-            user_balance = get_balance(db, user_id, "RUB")
+        if order.direction == "SELL":
+            user_balance = get_balance(db, user_id, order.ticker)
+            required_amount = order.qty
             if not user_balance or user_balance.amount < required_amount:
+                logger.error(f"Insufficient balance for sell order: user {user_id}, ticker {order.ticker}")
                 raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Insufficient balance")
 
-        else:  # MARKET ORDER
-            bids, asks = get_orderbook(db, order.ticker, limit=1)
-            if not asks:
-                raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="No matching sell orders available")
-            best_ask = asks[0]
-            market_price = best_ask.price
-            required_amount = order.qty * market_price
-            user_balance = get_balance(db, user_id, "RUB")
-            if not user_balance or user_balance.amount < required_amount:
-                raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Insufficient balance")
+        db_order = schemas.Order(
+            user_id=user_id,
+            instrument_ticker=order.ticker,
+            direction=order.direction.value,
+            type="LIMIT" if isinstance(order, models.LimitOrderBody) else "MARKET",
+            price=order.price if isinstance(order, models.LimitOrderBody) else None,
+            quantity=order.qty,
+            status="NEW"
+        )
+        db.add(db_order)
+        db.flush()
 
-    db_order = schemas.Order(
-        user_id=user_id,
-        instrument_ticker=order.ticker,
-        direction=order.direction.value,
-        type="LIMIT" if isinstance(order, models.LimitOrderBody) else "MARKET",
-        price=order.price if isinstance(order, models.LimitOrderBody) else None,
-        quantity=order.qty,
-        status="NEW"
-    )
-    db.add(db_order)
-    db.flush()
+        match_order(db, db_order)
 
-    match_order(db, db_order)
-
-    db.commit()
-    db.refresh(db_order)
-    return db_order
+        db.commit()
+        db.refresh(db_order)
+        return db_order
+    except Exception as e:
+        logger.error(f"Error creating order: {str(e)}", exc_info=True)
+        raise
 
 def cancel_order(db: Session, order_id: UUID) -> bool:
-    order = db.query(schemas.Order).filter(
-        schemas.Order.id == order_id,
-        schemas.Order.status.in_(["NEW", "PARTIALLY_EXECUTED"])
-    ).first()
+    try:
+        order = db.query(schemas.Order).filter(
+            schemas.Order.id == order_id
+        ).first()
 
-    if not order:
-        return False
+        if not order:
+            logger.error(f"Order not found for cancellation: {order_id}")
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Order not found"
+            )
 
-    # Проверяем тип ордера
-    if order.type == "MARKET":
-        # Для market-ордеров проверяем, не был ли он уже исполнен
-        if order.filled > 0:
-            raise ValueError("Cannot cancel partially executed market order")
-        # Разрешаем отмену неисполненных market-ордеров
+        if order.type == "MARKET":
+            if order.status != "NEW" or order.filled > 0:
+                logger.error(f"Cannot cancel market order {order_id} - status: {order.status}, filled: {order.filled}")
+                raise HTTPException(
+                    status_code=status.HTTP_402_PAYMENT_REQUIRED,
+                    detail="Cannot cancel market order (already executed or processing)"
+                )
+        else:
+            if order.status not in ["NEW", "PARTIALLY_EXECUTED"]:
+                logger.error(f"Cannot cancel limit order {order_id} - status: {order.status}")
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Cannot cancel limit order (already executed, cancelled, or rejected)"
+                )
+
         order.status = "CANCELLED"
-        db.add(order)
         db.commit()
         return True
-    else:
-        # Лимитные ордера можно отменять в любом случае
-        order.status = "CANCELLED"
-        db.add(order)
-        db.commit()
-        return True
+    except Exception as e:
+        logger.error(f"Error cancelling order {order_id}: {str(e)}", exc_info=True)
+        raise
 
 def get_balance(db: Session, user_id: UUID, ticker: str):
-    return db.query(schemas.Balance).filter(
-        schemas.Balance.user_id == user_id,
-        schemas.Balance.ticker == ticker
-    ).first()
+    try:
+        return db.query(schemas.Balance).filter(
+            schemas.Balance.user_id == user_id,
+            schemas.Balance.ticker == ticker
+        ).first()
+    except Exception as e:
+        logger.error(f"Error getting balance for user {user_id}, ticker {ticker}: {str(e)}", exc_info=True)
+        raise
 
 def get_balances(db: Session, user_id: UUID):
-    return db.query(schemas.Balance).filter(schemas.Balance.user_id == user_id).all()
+    try:
+        return db.query(schemas.Balance).filter(schemas.Balance.user_id == user_id).all()
+    except Exception as e:
+        logger.error(f"Error getting balances for user {user_id}: {str(e)}", exc_info=True)
+        raise
 
 def update_balance(db: Session, user_id: UUID, ticker: str, amount: int):
-    logger.info(f"Updating balance for user {user_id}, ticker={ticker}, amount={amount}")
+    try:
+        user = db.query(schemas.User).filter(schemas.User.id == user_id).first()
+        if user is None:
+            logger.error(f"User not found for balance update: {user_id}")
+            raise HTTPException(status_code=404, detail=f"User {user_id} not found")
 
-    user = db.query(schemas.User).filter(schemas.User.id == user_id).first()
-    if user is None:
-        raise HTTPException(status_code=404, detail=f"User {user_id} not found")
-    # Поиск текущего баланса
-    balance = db.query(schemas.Balance).filter(
-        schemas.Balance.user_id == user_id,
-        schemas.Balance.ticker == ticker
-    ).first()
+        balance = db.query(schemas.Balance).filter(
+            schemas.Balance.user_id == user_id,
+            schemas.Balance.ticker == ticker
+        ).first()
 
-    # Проверка на отрицательный баланс
-    if balance and (balance.amount + amount < 0):
-        raise ValueError("Insufficient balance to deduct")
+        if balance and (balance.amount + amount < 0):
+            logger.error(f"Insufficient balance for user {user_id}, ticker {ticker}")
+            raise ValueError("Insufficient balance to deduct")
 
-    # Обновление или создание баланса
-    if balance:
-        balance.amount += amount
-    else:
-        balance = schemas.Balance(
-            user_id=user_id,
-            ticker=ticker,
-            amount=amount
-        )
-        db.add(balance)
+        if balance:
+            balance.amount += amount
+        else:
+            balance = schemas.Balance(
+                user_id=user_id,
+                ticker=ticker,
+                amount=amount
+            )
+            db.add(balance)
 
-    db.commit()
-    db.refresh(balance)
-    return balance
+        db.commit()
+        db.refresh(balance)
+        return balance
+    except Exception as e:
+        logger.error(f"Error updating balance for user {user_id}, ticker {ticker}: {str(e)}", exc_info=True)
+        raise
 
 def delete_user(db: Session, user_id: UUID):
-    user = db.query(schemas.User).filter(schemas.User.id == user_id).first()
-    if user:
-        db.delete(user)
-        db.commit()
-        logger.info(f"Deleted user: {user_id}")
-        return True
-    return False
+    try:
+        user = db.query(schemas.User).filter(schemas.User.id == user_id).first()
+        if user:
+            db.delete(user)
+            db.commit()
+            return True
+        logger.error(f"User not found for deletion: {user_id}")
+        return False
+    except Exception as e:
+        logger.error(f"Error deleting user {user_id}: {str(e)}", exc_info=True)
+        raise
 
 def match_order(db: Session, new_order: schemas.Order):
-    logger.info(f"Starting order matching for: {new_order}")
-    
-    opposite_side = "BUY" if new_order.direction == "SELL" else "SELL"
-    
     try:
+        is_market_order = new_order.type == "MARKET"
+        opposite_side = "BUY" if new_order.direction == "SELL" else "SELL"
+        
         with db.begin_nested():
-            # Базовый запрос для поиска встречных ордеров
             base_query = db.query(schemas.Order).filter(
                 schemas.Order.instrument_ticker == new_order.instrument_ticker,
                 schemas.Order.direction == opposite_side,
@@ -241,15 +300,14 @@ def match_order(db: Session, new_order: schemas.Order):
                 schemas.Order.price.isnot(None)
             )
 
-            # Условия по цене
-            if new_order.price is not None:
-                if new_order.direction == "SELL":
+            if not is_market_order:
+                if new_order.direction == "BUY":
                     base_query = base_query.filter(schemas.Order.price <= new_order.price)
                 else:
                     base_query = base_query.filter(schemas.Order.price >= new_order.price)
 
             matching_orders = base_query.order_by(
-                schemas.Order.price.asc() if new_order.direction == "SELL" 
+                schemas.Order.price.asc() if new_order.direction == "BUY" 
                 else schemas.Order.price.desc(),
                 schemas.Order.created_at.asc()
             ).with_for_update().all()
@@ -267,52 +325,46 @@ def match_order(db: Session, new_order: schemas.Order):
                 if trade_qty <= 0:
                     continue
 
-                # Проверка балансов
+                trade_price = counter_order.price
+
                 if new_order.direction == "BUY":
-                    # Для BUY-ордера проверяем:
-                    # 1. Хватает ли RUB у покупателя
-                    # 2. Хватает ли акций у продавца
                     buyer_rub_balance = get_balance(db, new_order.user_id, "RUB")
                     seller_ticker_balance = get_balance(db, counter_order.user_id, new_order.instrument_ticker)
                     
-                    required_rub = trade_qty * counter_order.price
+                    required_rub = trade_qty * trade_price
                     
                     if not buyer_rub_balance or buyer_rub_balance.amount < required_rub:
-                        logger.warning(f"Insufficient RUB for user {new_order.user_id}")
+                        logger.error(f"Insufficient RUB for user {new_order.user_id}")
                         continue
                         
                     if not seller_ticker_balance or seller_ticker_balance.amount < trade_qty:
-                        logger.warning(f"Insufficient {new_order.instrument_ticker} for user {counter_order.user_id}")
+                        logger.error(f"Insufficient {new_order.instrument_ticker} for user {counter_order.user_id}")
                         continue
                 else:
-                    # Для SELL-ордера проверяем:
-                    # 1. Хватает ли акций у продавца
-                    # 2. Хватает ли RUB у покупателя
                     seller_ticker_balance = get_balance(db, new_order.user_id, new_order.instrument_ticker)
                     buyer_rub_balance = get_balance(db, counter_order.user_id, "RUB")
                     
-                    required_rub = trade_qty * counter_order.price
+                    required_rub = trade_qty * trade_price
                     
                     if not seller_ticker_balance or seller_ticker_balance.amount < trade_qty:
-                        logger.warning(f"Insufficient {new_order.instrument_ticker} for user {new_order.user_id}")
+                        logger.error(f"Insufficient {new_order.instrument_ticker} for user {new_order.user_id}")
                         continue
                         
                     if not buyer_rub_balance or buyer_rub_balance.amount < required_rub:
-                        logger.warning(f"Insufficient RUB for user {counter_order.user_id}")
+                        logger.error(f"Insufficient RUB for user {counter_order.user_id}")
                         continue
 
-                # Создаем транзакцию
                 trade = schemas.Transaction(
                     instrument_ticker=new_order.instrument_ticker,
-                    price=counter_order.price,
+                    price=trade_price,
                     quantity=trade_qty,
                     buyer_id=new_order.user_id if new_order.direction == "BUY" else counter_order.user_id,
-                    seller_id=counter_order.user_id if new_order.direction == "BUY" else new_order.user_id
+                    seller_id=counter_order.user_id if new_order.direction == "BUY" else new_order.user_id,
+                    created_at=datetime.utcnow()
                 )
                 db.add(trade)
                 trades.append(trade)
 
-                # Обновляем ордера
                 new_order.filled += trade_qty
                 counter_order.filled += trade_qty
 
@@ -328,38 +380,22 @@ def match_order(db: Session, new_order: schemas.Order):
 
                 db.add(new_order)
                 db.add(counter_order)
-                
                 qty_to_fill -= trade_qty
 
-                logger.info(f"Matched {trade_qty} {new_order.instrument_ticker} at {counter_order.price}")
-
-            db.commit()
-
-        # Обновляем балансы после успешного исполнения
         for trade in trades:
             try:
                 if new_order.direction == "BUY":
-                    # Для BUY-ордера:
-                    # 1. Покупатель получает акции
-                    update_balance(db, new_order.user_id, new_order.instrument_ticker, trade.quantity)
-                    # 2. Покупатель теряет RUB
-                    update_balance(db, new_order.user_id, "RUB", -trade.quantity * trade.price)
-                    # 3. Продавец получает RUB
+                    update_balance(db, trade.buyer_id, new_order.instrument_ticker, trade.quantity)
+                    update_balance(db, trade.buyer_id, "RUB", -trade.quantity * trade.price)
                     update_balance(db, trade.seller_id, "RUB", trade.quantity * trade.price)
-                    # 4. Продавец теряет акции
                     update_balance(db, trade.seller_id, new_order.instrument_ticker, -trade.quantity)
                 else:
-                    # Для SELL-ордера:
-                    # 1. Продавец получает RUB
-                    update_balance(db, new_order.user_id, "RUB", trade.quantity * trade.price)
-                    # 2. Продавец теряет акции
-                    update_balance(db, new_order.user_id, new_order.instrument_ticker, -trade.quantity)
-                    # 3. Покупатель получает акции
+                    update_balance(db, trade.seller_id, "RUB", trade.quantity * trade.price)
+                    update_balance(db, trade.seller_id, new_order.instrument_ticker, -trade.quantity)
                     update_balance(db, trade.buyer_id, new_order.instrument_ticker, trade.quantity)
-                    # 4. Покупатель теряет RUB
                     update_balance(db, trade.buyer_id, "RUB", -trade.quantity * trade.price)
             except ValueError as e:
-                logger.error(f"Balance update failed: {str(e)}")
+                logger.error(f"Balance update failed for trade {trade.id}: {str(e)}")
                 db.rollback()
                 raise
 
@@ -368,6 +404,6 @@ def match_order(db: Session, new_order: schemas.Order):
         return new_order
 
     except Exception as e:
+        logger.error(f"Order matching failed for order {new_order.id}: {str(e)}", exc_info=True)
         db.rollback()
-        logger.error(f"Order matching failed: {str(e)}", exc_info=True)
         raise
