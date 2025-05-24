@@ -75,10 +75,10 @@ def get_orderbook_endpoint(
     )
 )
 def get_transaction_history(
-    ticker: str, limit: int = Query(10, le=100), db: Session = Depends(get_db)
+    ticker: str, limit: int = Query(10, le=20), db: Session = Depends(get_db)
 ):
-    if limit > 100:
-        raise HTTPException(status_code=400, detail="Limit cannot exceed 100")
+    if limit > 20:
+        raise HTTPException(status_code=400, detail="Limit cannot exceed 20")
 
     db_transactions = get_transactions(db, ticker, limit)
     return [

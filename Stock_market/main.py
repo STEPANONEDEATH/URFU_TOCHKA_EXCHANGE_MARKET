@@ -7,7 +7,7 @@ from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from routers import admin, balance, order, public, ws
 
-# Создаем папку для логов, если её нет
+# Создание папки для логов
 Path("logs").mkdir(exist_ok=True)
 
 # Настройка логгера
@@ -29,7 +29,7 @@ file_handler = RotatingFileHandler(
 )
 file_handler.setFormatter(formatter)
 
-# Добавляем обработчики
+# Обработчики
 logger.addHandler(console_handler)
 logger.addHandler(file_handler)
 

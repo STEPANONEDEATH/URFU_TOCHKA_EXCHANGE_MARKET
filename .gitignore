@@ -33,7 +33,7 @@ MANIFEST
 *.spec
 
 # Installer logs
-logs/
+Stock_market/logs
 pip-log.txt
 pip-delete-this-directory.txt
 
