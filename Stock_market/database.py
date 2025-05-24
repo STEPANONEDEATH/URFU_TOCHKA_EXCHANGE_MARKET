@@ -2,10 +2,9 @@ import logging
 
 from config import settings
 from sqlalchemy import create_engine
-from sqlalchemy.pool import QueuePool
-from sqlalchemy.orm import sessionmaker
 from sqlalchemy.ext.declarative import declarative_base
-
+from sqlalchemy.orm import sessionmaker
+from sqlalchemy.pool import QueuePool
 
 # Настройка логирования SQLAlchemy
 logging.basicConfig()
@@ -18,12 +17,13 @@ engine = create_engine(
     pool_size=50,
     max_overflow=10,
     pool_pre_ping=True,  # Проверка соединения
-    connect_args={"connect_timeout": 5}  # Таймаут подключения
+    connect_args={"connect_timeout": 5},  # Таймаут подключения
 )
 
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 Base = declarative_base()
+
 
 def get_db():
     """

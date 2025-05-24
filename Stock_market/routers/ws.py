@@ -1,11 +1,10 @@
-import json
 import asyncio
-
+import json
 from typing import Dict
-from config import settings
-from aiokafka import AIOKafkaConsumer
-from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
+from aiokafka import AIOKafkaConsumer
+from config import settings
+from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
 router = APIRouter()
 
@@ -37,7 +36,7 @@ async def websocket_order_updates(websocket: WebSocket, user_id: str):
     consumer = AIOKafkaConsumer(
         f"stockmarket.orders.{user_id}.status",
         bootstrap_servers=settings.KAFKA_BOOTSTRAP_SERVERS,
-        value_deserializer=lambda v: json.loads(v.decode('utf-8'))
+        value_deserializer=lambda v: json.loads(v.decode("utf-8")),
     )
 
     await consumer.start()
@@ -45,10 +44,7 @@ async def websocket_order_updates(websocket: WebSocket, user_id: str):
     try:
         while True:
             async for message in consumer:
-                await manager.send_personal_message(
-                    json.dumps(message.value),
-                    user_id
-                )
+                await manager.send_personal_message(json.dumps(message.value), user_id)
             await asyncio.sleep(0.1)
     except WebSocketDisconnect:
         manager.disconnect(user_id)
@@ -62,7 +58,7 @@ async def websocket_trade_updates(websocket: WebSocket):
     consumer = AIOKafkaConsumer(
         "stockmarket.trades",
         bootstrap_servers=settings.KAFKA_BOOTSTRAP_SERVERS,
-        value_deserializer=lambda v: json.loads(v.decode('utf-8'))
+        value_deserializer=lambda v: json.loads(v.decode("utf-8")),
     )
 
     await consumer.start()

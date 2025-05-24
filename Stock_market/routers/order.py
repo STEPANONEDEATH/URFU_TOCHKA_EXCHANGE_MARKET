@@ -1,26 +1,28 @@
 import logging
-from uuid import UUID
-from database import get_db
 from typing import List, Union
-from sqlalchemy.orm import Session
+from uuid import UUID
+
+from crud import (cancel_order, create_order, get_instrument, get_order,
+                  get_orders)
+from database import get_db
 from dependencies import get_current_user
-from kafka.producer import produce_order_event
 from fastapi import APIRouter, Depends, HTTPException
-from crud import create_order, get_orders, get_order, cancel_order, get_instrument
-from models import LimitOrderBody, MarketOrderBody, CreateOrderResponse, LimitOrder, MarketOrder
+from kafka.producer import produce_order_event
+from models import (CreateOrderResponse, LimitOrder, LimitOrderBody,
+                    MarketOrder, MarketOrderBody)
+from sqlalchemy.orm import Session
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["order"])
 
-@router.get("/order",
-            response_model=List[Union[LimitOrder, MarketOrder]],
-            summary="List Orders",
-           )
-def list_orders(
-        user=Depends(get_current_user),
-        db: Session = Depends(get_db)
-):
+
+@router.get(
+    "/order",
+    response_model=List[Union[LimitOrder, MarketOrder]],
+    summary="List Orders",
+)
+def list_orders(user=Depends(get_current_user), db: Session = Depends(get_db)):
     try:
         logger.info(f"Listing orders for user {user.id}")
         db_orders = get_orders(db, user.id)
@@ -42,9 +44,9 @@ def list_orders(
                             direction=o.direction,
                             ticker=o.instrument_ticker,
                             qty=o.quantity,
-                            price=o.price
+                            price=o.price,
                         ),
-                        filled=o.filled
+                        filled=o.filled,
                     )
                 )
             else:
@@ -57,8 +59,8 @@ def list_orders(
                         body=MarketOrderBody(
                             direction=o.direction,
                             ticker=o.instrument_ticker,
-                            qty=o.quantity
-                        )
+                            qty=o.quantity,
+                        ),
                     )
                 )
 
@@ -66,21 +68,26 @@ def list_orders(
         return result
 
     except Exception as e:
-        logger.error(f"Error listing orders for user {user.id}: {str(e)}", exc_info=True)
+        logger.error(
+            f"Error listing orders for user {user.id}: {str(e)}", exc_info=True
+        )
         raise HTTPException(status_code=500, detail="Internal server error")
 
 
-@router.post("/order",
-             response_model=CreateOrderResponse,
-             summary="Create Order",
-            )
+@router.post(
+    "/order",
+    response_model=CreateOrderResponse,
+    summary="Create Order",
+)
 async def create_order_endpoint(
-        order: Union[LimitOrderBody, MarketOrderBody],
-        user=Depends(get_current_user),
-        db: Session = Depends(get_db)
+    order: Union[LimitOrderBody, MarketOrderBody],
+    user=Depends(get_current_user),
+    db: Session = Depends(get_db),
 ):
-    logger.info(f"Creating new order for user {user.id}, ticker: {order.ticker}, "
-               f"type: {'LIMIT' if isinstance(order, LimitOrderBody) else 'MARKET'}")
+    logger.info(
+        f"Creating new order for user {user.id}, ticker: {order.ticker}, "
+        f"type: {'LIMIT' if isinstance(order, LimitOrderBody) else 'MARKET'}"
+    )
 
     instrument = get_instrument(db, order.ticker)
     if not instrument:
@@ -90,7 +97,9 @@ async def create_order_endpoint(
     if isinstance(order, LimitOrderBody):
         if order.price <= 0:
             logger.error(f"Invalid price {order.price} for limit order")
-            raise HTTPException(status_code=422, detail="Price must be greater than zero.")
+            raise HTTPException(
+                status_code=422, detail="Price must be greater than zero."
+            )
         if order.price != int(order.price):
             logger.error(f"Non-integer price {order.price} for limit order")
             raise HTTPException(status_code=422, detail="Price must be an integer.")
@@ -116,20 +125,21 @@ async def create_order_endpoint(
     return CreateOrderResponse(order_id=db_order.id)
 
 
-@router.get("/order/{order_id}",
-            response_model=Union[LimitOrder, MarketOrder],
-            summary="Get Order"
-           )
+@router.get(
+    "/order/{order_id}",
+    response_model=Union[LimitOrder, MarketOrder],
+    summary="Get Order",
+)
 def get_order_endpoint(
-        order_id: UUID,
-        user=Depends(get_current_user),
-        db: Session = Depends(get_db)
+    order_id: UUID, user=Depends(get_current_user), db: Session = Depends(get_db)
 ):
     logger.info(f"Fetching order {order_id} for user {user.id}")
-    
+
     db_order = get_order(db, order_id)
     if not db_order or (db_order.user_id != user.id and user.role != "ADMIN"):
-        logger.warning(f"Order {order_id} not found or access denied for user {user.id}")
+        logger.warning(
+            f"Order {order_id} not found or access denied for user {user.id}"
+        )
         raise HTTPException(status_code=404, detail="Order not found")
 
     try:
@@ -143,9 +153,9 @@ def get_order_endpoint(
                     direction=db_order.direction,
                     ticker=db_order.instrument_ticker,
                     qty=db_order.quantity,
-                    price=db_order.price
+                    price=db_order.price,
                 ),
-                filled=db_order.filled
+                filled=db_order.filled,
             )
         else:
             return MarketOrder(
@@ -156,30 +166,28 @@ def get_order_endpoint(
                 body=MarketOrderBody(
                     direction=db_order.direction,
                     ticker=db_order.instrument_ticker,
-                    qty=db_order.quantity
-                )
+                    qty=db_order.quantity,
+                ),
             )
     except Exception as e:
         logger.error(f"Error processing order {order_id}: {str(e)}", exc_info=True)
         raise HTTPException(status_code=500, detail="Internal server error")
 
 
-@router.delete("/order/{order_id}",
-               response_model=dict,
-               summary="Cancel Order")
+@router.delete("/order/{order_id}", response_model=dict, summary="Cancel Order")
 async def cancel_order_endpoint(
-        order_id: UUID,
-        user=Depends(get_current_user),
-        db: Session = Depends(get_db)
+    order_id: UUID, user=Depends(get_current_user), db: Session = Depends(get_db)
 ):
     logger.info(f"Cancelling order {order_id} for user {user.id}")
-    
+
     db_order = get_order(db, order_id)
-    
+
     if not db_order or db_order.user_id != user.id:
-        logger.warning(f"Order {order_id} not found or access denied for user {user.id}")
+        logger.warning(
+            f"Order {order_id} not found or access denied for user {user.id}"
+        )
         raise HTTPException(status_code=404, detail="Order not found")
-    
+
     if db_order.status == "CANCELLED":
         logger.warning(f"Order {order_id} already cancelled")
         raise HTTPException(status_code=422, detail="Order already cancelled")
@@ -188,25 +196,29 @@ async def cancel_order_endpoint(
         success = cancel_order(db, order_id)
         if not success:
             logger.error(f"Order {order_id} cannot be cancelled in current state")
-            raise HTTPException(status_code=400, detail="Order cannot be cancelled in its current state")
-            
+            raise HTTPException(
+                status_code=400, detail="Order cannot be cancelled in its current state"
+            )
+
         db.refresh(db_order)
         logger.info(f"Order {order_id} cancelled successfully")
-        
+
         try:
             await produce_order_event(db_order, "CANCELLED")
             logger.debug(f"Order cancellation event produced for order {order_id}")
         except Exception as e:
-            logger.error(f"Failed to produce cancellation event: {str(e)}", exc_info=True)
+            logger.error(
+                f"Failed to produce cancellation event: {str(e)}", exc_info=True
+            )
             # Не прерываем выполнение, так как ордер уже отменен
-            
+
         return {"success": True}
-        
+
     except HTTPException:
         raise
     except Exception as e:
         logger.error(f"Error cancelling order {order_id}: {str(e)}", exc_info=True)
         raise HTTPException(
             status_code=500,
-            detail="Internal server error while processing order cancellation"
+            detail="Internal server error while processing order cancellation",
         )

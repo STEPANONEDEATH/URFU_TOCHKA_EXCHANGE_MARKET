@@ -1,12 +1,13 @@
 import uuid
-
-from database import Base
 from datetime import datetime
 from zoneinfo import ZoneInfo
+
+from database import Base
 from pydantic import BaseModel
-from sqlalchemy.orm import relationship
+from sqlalchemy import UUID as SQLUUID
+from sqlalchemy import Boolean, Column, Enum, ForeignKey, Integer, String
 from sqlalchemy.dialects.postgresql import TIMESTAMP
-from sqlalchemy import Column, Integer, String, Enum, UUID as SQLUUID, Boolean, ForeignKey
+from sqlalchemy.orm import relationship
 
 
 def utcnow():
@@ -43,24 +44,33 @@ class Order(Base):
 
     id = Column(SQLUUID, primary_key=True, default=uuid.uuid4)
     user_id = Column(SQLUUID, ForeignKey("users.id", ondelete="CASCADE"))
-    instrument_ticker = Column(String, ForeignKey("instruments.ticker", ondelete="CASCADE"))
+    instrument_ticker = Column(
+        String, ForeignKey("instruments.ticker", ondelete="CASCADE")
+    )
     direction = Column(Enum("BUY", "SELL", name="order_direction"))
     type = Column(Enum("MARKET", "LIMIT", name="order_type"))
     price = Column(Integer, nullable=True)
     quantity = Column(Integer, nullable=False)
     filled = Column(Integer, default=0)
-    status = Column(Enum("NEW", "EXECUTED", "PARTIALLY_EXECUTED", "CANCELLED", name="order_status"), default="NEW")
+    status = Column(
+        Enum("NEW", "EXECUTED", "PARTIALLY_EXECUTED", "CANCELLED", name="order_status"),
+        default="NEW",
+    )
     created_at = Column(TIMESTAMP(timezone=True), default=utcnow)
     updated_at = Column(TIMESTAMP(timezone=True), default=utcnow, onupdate=utcnow)
 
     user = relationship("User", back_populates="orders", passive_deletes=True)
-    instrument = relationship("Instrument", back_populates="orders", passive_deletes=True)
+    instrument = relationship(
+        "Instrument", back_populates="orders", passive_deletes=True
+    )
 
 
 class Balance(Base):
     __tablename__ = "balances"
 
-    user_id = Column(SQLUUID, ForeignKey("users.id", ondelete="CASCADE"), primary_key=True)
+    user_id = Column(
+        SQLUUID, ForeignKey("users.id", ondelete="CASCADE"), primary_key=True
+    )
     ticker = Column(String, primary_key=True)
     amount = Column(Integer, default=0)
 

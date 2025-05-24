@@ -1,14 +1,11 @@
-import json
 import asyncio
-
-from typing import Dict
-from config import settings
-from aiokafka import AIOKafkaConsumer
-from datetime import datetime, timezone
-
-
+import json
 from contextlib import asynccontextmanager
+from datetime import datetime, timezone
+from typing import Dict
 
+from aiokafka import AIOKafkaConsumer
+from config import settings
 
 # Глобальный словарь для хранения активных consumers
 consumers: Dict[str, AIOKafkaConsumer] = {}
@@ -25,14 +22,17 @@ async def match_orders():
     consumer = AIOKafkaConsumer(
         "stockmarket.orders.place",
         bootstrap_servers=settings.KAFKA_BOOTSTRAP_SERVERS,
-        value_deserializer=lambda v: json.loads(v.decode('utf-8')))
+        value_deserializer=lambda v: json.loads(v.decode("utf-8")),
+    )
 
     try:
         await consumer.start()
         async for msg in consumer:
             order = msg.value
             # Здесь должна быть логика ордеров
-            print(f"[{datetime.now(timezone.utc).isoformat()}] Processing order:", order)
+            print(
+                f"[{datetime.now(timezone.utc).isoformat()}] Processing order:", order
+            )
     finally:
         await consumer.stop()
 
@@ -43,8 +43,8 @@ async def get_consumer(user_id: str):
     consumer = AIOKafkaConsumer(
         f"stockmarket.orders.{user_id}.status",
         bootstrap_servers=settings.KAFKA_BOOTSTRAP_SERVERS,
-        value_deserializer=lambda v: json.loads(v.decode('utf-8')),
-        auto_offset_reset='latest'
+        value_deserializer=lambda v: json.loads(v.decode("utf-8")),
+        auto_offset_reset="latest",
     )
 
     try:
@@ -64,11 +64,13 @@ async def consume_order_updates(user_id: str):
         try:
             async for msg in consumer:
                 await manager.send_personal_message(
-                    json.dumps({
-                        **msg.value,
-                        "timestamp": datetime.now(timezone.utc).isoformat()
-                    }),
-                    user_id
+                    json.dumps(
+                        {
+                            **msg.value,
+                            "timestamp": datetime.now(timezone.utc).isoformat(),
+                        }
+                    ),
+                    user_id,
                 )
         except asyncio.CancelledError:
             print(f"Consumer for user {user_id} was cancelled")

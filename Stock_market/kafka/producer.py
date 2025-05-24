@@ -1,11 +1,10 @@
-import uuid
 import json
-
-from config import settings
-from typing import Optional
+import uuid
 from datetime import datetime, timezone
-from aiokafka import AIOKafkaProducer
+from typing import Optional
 
+from aiokafka import AIOKafkaProducer
+from config import settings
 
 producer: Optional[AIOKafkaProducer] = None
 
@@ -14,7 +13,7 @@ async def init_producer():
     global producer
     producer = AIOKafkaProducer(
         bootstrap_servers=settings.KAFKA_BOOTSTRAP_SERVERS,
-        value_serializer=lambda v: json.dumps(v).encode('utf-8')
+        value_serializer=lambda v: json.dumps(v).encode("utf-8"),
     )
     await producer.start()
 
@@ -36,13 +35,10 @@ async def produce_order_event(order, action: str):
         "price": order.price,
         "quantity": order.quantity,
         "status": action.lower(),
-        "timestamp": order.created_at.isoformat()
+        "timestamp": order.created_at.isoformat(),
     }
 
-    await producer.send(
-        f"stockmarket.orders.{order.user_id}.status",
-        value=message
-    )
+    await producer.send(f"stockmarket.orders.{order.user_id}.status", value=message)
 
     if action == "EXECUTED":
         await producer.send(
@@ -54,8 +50,8 @@ async def produce_order_event(order, action: str):
                 "instrument": order.instrument_ticker,
                 "price": order.price,
                 "quantity": order.quantity,
-                "timestamp": datetime.now(timezone.utc).isoformat()
-            }
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+            },
         )
 
 
@@ -63,7 +59,4 @@ async def produce_trade_event(trade_data):
     if not producer:
         raise RuntimeError("Kafka producer not initialized")
 
-    await producer.send(
-        "stockmarket.trades",
-        value=trade_data
-    )
+    await producer.send("stockmarket.trades", value=trade_data)
