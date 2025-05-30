@@ -108,6 +108,8 @@ async def create_order_endpoint(
         db_order = create_order(db, order, user.id)
         db.refresh(db_order)
         logger.info(f"Order created successfully: {db_order.id}")
+    except HTTPException as e:
+        raise e
     except ValueError as e:
         logger.error(f"Order creation failed: {str(e)}")
         raise HTTPException(status_code=422, detail=str(e))
@@ -120,7 +122,6 @@ async def create_order_endpoint(
         logger.debug(f"Order event produced for order {db_order.id}")
     except Exception as e:
         logger.error(f"Failed to produce order event: {str(e)}", exc_info=True)
-        # Не прерываем выполнение, так как ордер уже создан
 
     return CreateOrderResponse(order_id=db_order.id)
 

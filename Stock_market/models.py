@@ -56,13 +56,15 @@ class Transaction(BaseModel):
     timestamp: datetime
 
 
-class OHLCV(BaseModel):
-    timestamp: datetime
+class CandleSchema(BaseModel):
+    ticker: str
+    start_time: datetime
+    end_time: datetime
     open: float
     high: float
     low: float
     close: float
-    volume: int
+    volume: float
 
 
 class LimitOrderBody(BaseModel):

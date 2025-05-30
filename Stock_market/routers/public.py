@@ -57,12 +57,8 @@ def get_orderbook_endpoint(
     bids, asks = get_orderbook(db, ticker, limit)
 
     return L2OrderBook(
-        bid_levels=[Level(price=o.price, qty=o.quantity - o.filled) for o in bids],
-        ask_levels=[
-            Level(price=o.price, qty=o.quantity - o.filled)
-            for o in asks
-            if o.price is not None
-        ],
+        bid_levels=bids,
+        ask_levels=asks,
     )
 
 
@@ -75,10 +71,10 @@ def get_orderbook_endpoint(
     )
 )
 def get_transaction_history(
-    ticker: str, limit: int = Query(10, le=20), db: Session = Depends(get_db)
+    ticker: str, limit: int = Query(10, le=100), db: Session = Depends(get_db)
 ):
-    if limit > 20:
-        raise HTTPException(status_code=400, detail="Limit cannot exceed 20")
+    if limit > 100:
+        raise HTTPException(status_code=400, detail="Limit cannot exceed 100")
 
     db_transactions = get_transactions(db, ticker, limit)
     return [

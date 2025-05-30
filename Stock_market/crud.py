@@ -6,12 +6,14 @@ from uuid import UUID
 
 import models
 import schemas
+from models import Level
 from fastapi import HTTPException, status
 from schemas import Balance
 from schemas import Instrument as ORMInstrument
 from schemas import User
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
+from collections import defaultdict
 
 logger = logging.getLogger(__name__)
 
@@ -124,7 +126,7 @@ def delete_instrument(db: Session, ticker: str) -> bool:
 
 def get_orderbook(db: Session, ticker: str, limit: int = 10):
     try:
-        bids = (
+        bids_raw = (
             db.query(schemas.Order)
             .filter(
                 schemas.Order.instrument_ticker == ticker,
@@ -133,12 +135,11 @@ def get_orderbook(db: Session, ticker: str, limit: int = 10):
                 schemas.Order.type == "LIMIT",
                 schemas.Order.price != None,
             )
-            .order_by(schemas.Order.price.desc())
-            .limit(limit)
+            .order_by(schemas.Order.price.desc(), schemas.Order.created_at.asc())
             .all()
         )
 
-        asks = (
+        asks_raw = (
             db.query(schemas.Order)
             .filter(
                 schemas.Order.instrument_ticker == ticker,
@@ -147,12 +148,27 @@ def get_orderbook(db: Session, ticker: str, limit: int = 10):
                 schemas.Order.type == "LIMIT",
                 schemas.Order.price != None,
             )
-            .order_by(schemas.Order.price.asc())
-            .limit(limit)
+            .order_by(schemas.Order.price.asc(), schemas.Order.created_at.asc())
             .all()
         )
 
+        def aggregate(orders, direction: str):
+            grouped = defaultdict(int)
+            for o in orders:
+                grouped[o.price] += o.quantity - o.filled
+
+            reverse = direction == "BUY"
+            return [
+                Level(price=price, qty=qty)
+                for price, qty in sorted(grouped.items(), reverse=reverse)
+                if qty > 0
+            ]
+
+        bids = aggregate(bids_raw, "BUY")[:limit]
+        asks = aggregate(asks_raw, "SELL")[:limit]
+
         return bids, asks
+
     except Exception as e:
         logger.error(f"Error getting orderbook for {ticker}: {str(e)}", exc_info=True)
         raise
