@@ -1,10 +1,11 @@
 import logging
 
-from config import settings
 from sqlalchemy import create_engine
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import QueuePool
+
+from config import settings
 
 # Настройка логирования SQLAlchemy
 logging.basicConfig()

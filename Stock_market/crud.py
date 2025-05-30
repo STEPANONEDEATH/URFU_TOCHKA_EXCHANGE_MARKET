@@ -1,19 +1,20 @@
 import logging
 import uuid
+from collections import defaultdict
 from datetime import datetime
 from typing import Union
 from uuid import UUID
 
+from fastapi import HTTPException, status
+from sqlalchemy.exc import IntegrityError
+from sqlalchemy.orm import Session
+
 import models
 import schemas
 from models import Level
-from fastapi import HTTPException, status
 from schemas import Balance
 from schemas import Instrument as ORMInstrument
 from schemas import User
-from sqlalchemy.exc import IntegrityError
-from sqlalchemy.orm import Session
-from collections import defaultdict
 
 logger = logging.getLogger(__name__)
 

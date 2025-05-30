@@ -5,6 +5,7 @@ from datetime import datetime, timezone
 from typing import Dict
 
 from aiokafka import AIOKafkaConsumer
+
 from config import settings
 
 # Глобальный словарь для хранения активных consumers

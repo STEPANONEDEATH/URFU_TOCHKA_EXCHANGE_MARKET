@@ -2,12 +2,13 @@ import uuid
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
-from database import Base
 from pydantic import BaseModel
 from sqlalchemy import UUID as SQLUUID
 from sqlalchemy import Boolean, Column, Enum, ForeignKey, Integer, String
 from sqlalchemy.dialects.postgresql import TIMESTAMP
 from sqlalchemy.orm import relationship
+
+from database import Base
 
 
 def utcnow():

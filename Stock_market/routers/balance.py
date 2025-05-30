@@ -1,10 +1,11 @@
 from typing import Dict
 
+from fastapi import APIRouter, Depends
+from sqlalchemy.orm import Session
+
 from crud import get_balances
 from database import get_db
 from dependencies import get_current_user
-from fastapi import APIRouter, Depends
-from sqlalchemy.orm import Session
 
 router = APIRouter()
 

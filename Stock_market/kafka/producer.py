@@ -4,6 +4,7 @@ from datetime import datetime, timezone
 from typing import Optional
 
 from aiokafka import AIOKafkaProducer
+
 from config import settings
 
 producer: Optional[AIOKafkaProducer] = None

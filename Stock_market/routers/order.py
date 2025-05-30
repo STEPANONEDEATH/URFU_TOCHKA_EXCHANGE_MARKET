@@ -2,15 +2,20 @@ import logging
 from typing import List, Union
 from uuid import UUID
 
-from crud import (cancel_order, create_order, get_instrument, get_order,
-                  get_orders)
+from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy.orm import Session
+
+from crud import cancel_order, create_order, get_instrument, get_order, get_orders
 from database import get_db
 from dependencies import get_current_user
-from fastapi import APIRouter, Depends, HTTPException
 from kafka.producer import produce_order_event
-from models import (CreateOrderResponse, LimitOrder, LimitOrderBody,
-                    MarketOrder, MarketOrderBody)
-from sqlalchemy.orm import Session
+from models import (
+    CreateOrderResponse,
+    LimitOrder,
+    LimitOrderBody,
+    MarketOrder,
+    MarketOrderBody,
+)
 
 logger = logging.getLogger(__name__)
 

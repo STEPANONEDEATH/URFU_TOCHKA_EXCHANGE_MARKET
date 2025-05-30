@@ -1,13 +1,20 @@
 from typing import Annotated
 from uuid import UUID
 
-from crud import (create_instrument, delete_instrument, delete_user,
-                  get_balance, get_user, update_balance)
+from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy.orm import Session
+
+from crud import (
+    create_instrument,
+    delete_instrument,
+    delete_user,
+    get_balance,
+    get_user,
+    update_balance,
+)
 from database import get_db
 from dependencies import get_admin_user
-from fastapi import APIRouter, Depends, HTTPException, status
 from models import DepositRequest, Instrument, Ok, User, WithdrawRequest
-from sqlalchemy.orm import Session
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 

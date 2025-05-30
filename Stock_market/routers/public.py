@@ -1,9 +1,15 @@
-from crud import (create_user, get_instrument, get_instruments, get_orderbook,
-                  get_transactions)
-from database import get_db
 from fastapi import APIRouter, Depends, HTTPException, Query
-from models import Instrument, L2OrderBook, Level, NewUser, Transaction, User
 from sqlalchemy.orm import Session
+
+from crud import (
+    create_user,
+    get_instrument,
+    get_instruments,
+    get_orderbook,
+    get_transactions,
+)
+from database import get_db
+from models import Instrument, L2OrderBook, Level, NewUser, Transaction, User
 
 router = APIRouter(tags=["public"])
 
@@ -17,7 +23,7 @@ router = APIRouter(tags=["public"])
         "api_key полученный из этого метода следует передавать в другие через заголовок Authorization. "
         "Например для api_key='key-bee6de4d-7a23-4bb1-a048-523c2ef0ea0c` значение будет таким: "
         "Authorization: TOKEN key-bee6de4d-7a23-4bb1-a048-523c2ef0ea0c"
-    )
+    ),
 )
 def register(new_user: NewUser, db: Session = Depends(get_db)):
     return create_user(db, new_user)
@@ -27,9 +33,7 @@ def register(new_user: NewUser, db: Session = Depends(get_db)):
     "/instrument",
     response_model=list[Instrument],
     summary="List Instruments",
-    description=(
-        "Список доступных инструментов"
-    )
+    description=("Список доступных инструментов"),
 )
 def list_instruments(db: Session = Depends(get_db)):
     return get_instruments(db)
@@ -39,9 +43,7 @@ def list_instruments(db: Session = Depends(get_db)):
     "/orderbook/{ticker}",
     response_model=L2OrderBook,
     summary="Get Orderbook",
-    description=(
-        "Текущие заявки"
-    )
+    description=("Текущие заявки"),
 )
 def get_orderbook_endpoint(
     ticker: str, limit: int = Query(10, le=25), db: Session = Depends(get_db)
@@ -66,9 +68,7 @@ def get_orderbook_endpoint(
     "/transactions/{ticker}",
     response_model=list[Transaction],
     summary="Get Transaction History",
-    description=(
-        "История сделок"
-    )
+    description=("История сделок"),
 )
 def get_transaction_history(
     ticker: str, limit: int = Query(10, le=100), db: Session = Depends(get_db)

@@ -3,8 +3,9 @@ import json
 from typing import Dict
 
 from aiokafka import AIOKafkaConsumer
-from config import settings
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
+
+from config import settings
 
 router = APIRouter()
 

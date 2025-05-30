@@ -1,8 +1,9 @@
-from crud import get_user_by_api_key
-from database import get_db
 from fastapi import Depends, HTTPException, status
 from fastapi.security import APIKeyHeader
 from sqlalchemy.orm import Session
+
+from crud import get_user_by_api_key
+from database import get_db
 
 api_key_scheme = APIKeyHeader(name="Authorization")
 
