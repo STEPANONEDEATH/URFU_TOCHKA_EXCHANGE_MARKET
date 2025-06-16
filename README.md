@@ -10,7 +10,7 @@
 
 ### Требования к оформлению:
 Язык: Python
-- API реализован согласно схеме (посмотреть можно через https://editor-next.swagger.io)
+- API реализован согласно [схеме](https://github.com/STEPANONEDEATH/URFU_TOCHKA_EXCHANGE_MARKET/blob/main/openapi.json) (посмотреть можно через https://editor-next.swagger.io)
 - Репозиторий с кодом на Github.com
 - Запуск в Docker-контейнере (Dockerfile для сборки обязателен)
 - Самостоятельно развернуть приложение на хостинге, сделать доступным из вне для запросов
